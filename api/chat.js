@@ -49,8 +49,6 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: "Invalid JSON from HF" });
   }
 
-  // flan-t5-small renvoie un tableau d'objets { generated_text: "..." }
   const reply = data[0]?.generated_text?.trim() ?? "…";
-
   return res.status(200).json({ reply });
 }
