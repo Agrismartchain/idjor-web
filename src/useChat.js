@@ -8,13 +8,11 @@ export function useChat() {
 
   async function sendMessage(userText) {
     setLoading(true);
-    // On ajoute immédiatement le message utilisateur
     setMessages((prev) => [...prev, { role: "user", content: userText }]);
 
     try {
-      // Appelle l'API Hugging Face Space
       const res = await fetch(
-        "https://hf.space/embed/WakamaFarm/idjor-chat/api/predict/", 
+        "https://idjor-chat.hf.space/run/predict",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -22,12 +20,9 @@ export function useChat() {
         }
       );
       const json = await res.json();
-      // La réponse est dans json.data[0]
       const botReply = json.data?.[0] || "Désolé, je n'ai pas compris.";
-
       setMessages((prev) => [...prev, { role: "bot", content: botReply }]);
-    } catch (err) {
-      console.error(err);
+    } catch {
       setMessages((prev) => [
         ...prev,
         { role: "bot", content: "Erreur de connexion au serveur." },
