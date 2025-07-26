@@ -12,18 +12,18 @@ export function useChat() {
 
     try {
       const res = await fetch(
-  "https://hf.space/embed/WakamaFarm/idjor-chat/+/api/predict",
-  {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ data: [userText] }),
-  }
-);
-
+        "https://hf.space/embed/WakamaFarm/idjor-chat/+/run/predict",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: [userText] }),
+        }
+      );
       const json = await res.json();
       const botReply = json.data?.[0] || "Désolé, je n'ai pas compris.";
       setMessages((prev) => [...prev, { role: "bot", content: botReply }]);
-    } catch {
+    } catch (err) {
+      console.error(err);
       setMessages((prev) => [
         ...prev,
         { role: "bot", content: "Erreur de connexion au serveur." },
