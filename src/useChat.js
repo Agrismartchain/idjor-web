@@ -11,17 +11,16 @@ export function useChat() {
     setMessages((prev) => [...prev, { role: "user", content: userText }]);
 
     try {
-      const res = await fetch(
-        "https://hf.space/embed/WakamaFarm/idjor-chat/+/run/predict",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ data: [userText] }),
-        }
-      );
-      const json = await res.json();
-      const botReply = json.data?.[0] || "Désolé, je n'ai pas compris.";
-      setMessages((prev) => [...prev, { role: "bot", content: botReply }]);
+      // src/useChat.js
+const res = await fetch("/api/chat", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: userText }),
+});
+
+      if (!res.ok) throw new Error(`Status ${res.status}`);
+      const { reply } = await res.json();
+      setMessages((prev) => [...prev, { role: "bot", content: reply }]);
     } catch (err) {
       console.error(err);
       setMessages((prev) => [
