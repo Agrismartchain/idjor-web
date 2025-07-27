@@ -1,36 +1,80 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
-export function useChat() {
-  const [messages, setMessages] = useState([
-    { role: "bot", content: "Bonjour ! Écris un message ci‑dessous…" },
-  ]);
+const STORAGE_KEY = "chat_messages_map";
+
+export function useChat(sessionId) {
+  // Initialize messagesMap from localStorage
+  const [messagesMap, setMessagesMap] = useState(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
   const [loading, setLoading] = useState(false);
 
-  async function sendMessage(userText) {
+  // Persist messagesMap to localStorage on change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messagesMap));
+    } catch {
+      // ignore
+    }
+  }, [messagesMap]);
+
+  const messages = messagesMap[sessionId] || [];
+
+  const updateSession = (id, newMessages) => {
+    setMessagesMap((prev) => ({ ...prev, [id]: newMessages }));
+  };
+
+  const sendMessage = async (text) => {
     setLoading(true);
-    setMessages((prev) => [...prev, { role: "user", content: userText }]);
+    const userMsg = { role: "user", content: text };
+    const history = [...messages, userMsg];
+    updateSession(sessionId, history);
 
     try {
-      // src/useChat.js
-const res = await fetch("/api/chat", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ message: userText }),
-});
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      });
+      if (!res.ok) throw new Error("Erreur API chat");
 
-      if (!res.ok) throw new Error(`Status ${res.status}`);
-      const { reply } = await res.json();
-      setMessages((prev) => [...prev, { role: "bot", content: reply }]);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let botContent = "";
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        botContent += decoder.decode(value || new Uint8Array(), { stream: true });
+      }
+
+      let reply = botContent;
+      try {
+        const data = JSON.parse(botContent);
+        if (data.reply) reply = data.reply;
+      } catch {
+        // keep raw content
+      }
+
+      const botMsg = { role: "bot", content: reply };
+      updateSession(sessionId, [...history, botMsg]);
     } catch (err) {
       console.error(err);
-      setMessages((prev) => [
-        ...prev,
-        { role: "bot", content: "Erreur de connexion au serveur." },
-      ]);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  return { messages, sendMessage, loading };
+  const reset = () => {
+    updateSession(sessionId, []);
+  };
+
+  return { messages, sendMessage, loading, reset };
 }
