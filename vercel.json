@@ -2,16 +2,15 @@
   "version": 2,
   "builds": [
     { "src": "api/**/*.js",      "use": "@vercel/node" },
-    { "src": "package.json",     "use": "@vercel/static-build", "config": { "distDir": "dist" } }
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    }
   ],
   "routes": [
-    // 1) Toutes les requêtes /api/... vont vers ton code serverless
-    { "src": "/api/(.*)", "dest": "/api/$1.js" },
-
-    // 2) Laisse Vercel servir d’abord les fichiers statiques existants
+    { "src": "/api/(.*)",         "dest": "/api/$1.js" },
     { "handle": "filesystem" },
-
-    // 3) Tout le reste (SPA) retombe sur index.html
-    { "src": "/.*", "dest": "/index.html" }
+    { "src": "/.*",               "dest": "/index.html" }
   ]
 }
