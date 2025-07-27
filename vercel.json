@@ -1,20 +1,24 @@
 {
   "version": 2,
   "builds": [
+    // 1) Builder les fonctions serverless
+    { "src": "api/**/*.js",      "use": "@vercel/node" },
+
+    // 2) Builder votre frontend statique
     {
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": { "distDir": "dist" }
     }
   ],
-  "functions": {
-    "api/**/*.js": { "runtime": "nodejs18.x" }
-  },
   "routes": [
+    // A) /api/* → vos lambdas
     { "src": "/api/(.*)", "dest": "/api/$1.js" },
 
+    // B) fichiers statiques existants (CSS, JS, images…)
     { "handle": "filesystem" },
 
+    // C) SPA fallback
     { "src": "/.*",      "dest": "/index.html" }
   ]
 }
