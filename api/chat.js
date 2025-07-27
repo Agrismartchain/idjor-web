@@ -1,4 +1,5 @@
 // api/chat.js
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -7,46 +8,50 @@ export default async function handler(req, res) {
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: "No message provided" });
 
-  const HF_TOKEN = process.env.HF_TOKEN;
-  if (!HF_TOKEN) {
-    console.error("Missing HF_TOKEN");
-    return res.status(500).json({ error: "HF_TOKEN not set" });
+  // 1) Lancement de l'inférence : on POST et on récupère event_id
+  const postRes = await fetch(
+    "https://wakamafarm-flan-t5-small-inference.hf.space/gradio_api/call/predict",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: [message], fn_index: 0 })
+    }
+  );
+  const postJson = await postRes.json();
+  const eventId = postJson.event_id;
+  if (!eventId) {
+    console.error("No event_id returned:", postJson);
+    return res.status(500).json({ error: "No event_id returned" });
   }
 
-  let hfRes;
-  try {
-    hfRes = await fetch(
-      "https://api-inference.huggingface.co/models/google/flan-t5-small",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ inputs: message }),
+  // 2) Lecture du flux SSE pour récupérer la réponse complète
+  const streamRes = await fetch(
+    `https://wakamafarm-flan-t5-small-inference.hf.space/gradio_api/call/predict/${eventId}`,
+    { headers: { Accept: "text/event-stream" } }
+  );
+  if (!streamRes.ok) {
+    const errText = await streamRes.text();
+    console.error("Error fetching SSE:", streamRes.status, errText);
+    return res.status(streamRes.status).json({ error: errText });
+  }
+
+  const reader = streamRes.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let botReply = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value);
+    for (const line of chunk.split("\n")) {
+      if (line.startsWith("data:")) {
+        try {
+          const payload = JSON.parse(line.slice(5).trim());
+          botReply += payload[0];
+        } catch {}
       }
-    );
-  } catch (e) {
-    console.error("Fetch error:", e);
-    return res
-      .status(502)
-      .json({ error: "Bad gateway calling HF API", details: e.message });
+    }
   }
 
-  if (!hfRes.ok) {
-    const text = await hfRes.text();
-    console.error("HF API error", hfRes.status, text);
-    return res.status(hfRes.status).json({ error: text });
-  }
-
-  let data;
-  try {
-    data = await hfRes.json();
-  } catch (e) {
-    console.error("Invalid JSON from HF API:", e);
-    return res.status(502).json({ error: "Invalid JSON from HF" });
-  }
-
-  const reply = data[0]?.generated_text?.trim() ?? "…";
-  return res.status(200).json({ reply });
+  return res.status(200).json({ reply: botReply });
 }
