@@ -1,7 +1,15 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/**/*.js",          "use": "@vercel/node" },
-    { "src": "package.json",         "use": "@vercel/static-build", "config": { "distDir": "dist" } }
+    { "src": "api/**/*.js",      "use": "@vercel/node" },
+    { "src": "package.json",     "use": "@vercel/static-build", "config": { "distDir": "dist" } }
+  ],
+  "routes": [
+    // 1) toutes les requêtes /api/... vont
+    //    vers ta fonction correspondante dans /api/*.js
+    { "src": "/api/(.*)", "dest": "/api/$1.js" },
+
+    // 2) toutes les autres requêtes servent ton site statique
+    { "src": "/(.*)",     "dest": "/index.html" }
   ]
 }
