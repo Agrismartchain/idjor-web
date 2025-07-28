@@ -3,11 +3,14 @@ import { v4 as uuid } from "uuid";
 import { motion } from "framer-motion";
 import { useChat } from "./useChat";
 import { FaGoogleDrive, FaDropbox } from "react-icons/fa";
-import { FiPaperclip } from "react-icons/fi";
+import { FiPaperclip, FiPlus, FiSearch } from "react-icons/fi";
 import { IoSend } from "react-icons/io5";
 import { TbRobot } from "react-icons/tb";
+import { FiMenu } from "react-icons/fi";  // menu toggle icon
 
 export default function ChatPage() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);  // toggle sidebar
+
   // Projets
   const [projects, setProjects] = useState(() => {
     const raw = localStorage.getItem("chat_projects");
@@ -101,38 +104,66 @@ export default function ChatPage() {
 
   return (
     <div className="relative flex min-h-screen">
+      {/* Toggle sidebar button */}
+      <button onClick={() => setSidebarOpen(!sidebarOpen)} className="absolute top-4 left-4 z-50 p-2 text-white">
+        <FiMenu size={24} />
+      </button>
       {/* Global Title */}
-      <h1 className="absolute top-4 left-6 text-2xl font-bold text-white z-30">iDJOR AI</h1>
+      <img
+  src="/logo.png"
+  alt="iDJOR AI logo"
+  className={`absolute top-4 z-30 transition-all duration-300 ${sidebarOpen ? 'left-72 w-16' : 'left-20 w-[5.5rem]'}`}
+  style={{ height: 'auto' }}
+/>
 
       {/* Sidebar */}
-      <aside className="fixed top-0 left-0 h-full w-64 bg-[#0f0f17] text-white transform -translate-x-60 hover:translate-x-0 transition duration-300 z-20">
-        <div className="p-4 flex flex-col h-full">
-          <button onClick={handleNewProject} className="mb-4 w-full py-2 px-3 bg-[#27293f] rounded hover:bg-[#383950]">+ Nouveau projet</button>
-          <h3 className="uppercase text-xs mb-2 opacity-70">Projets</h3>
-          <ul className="space-y-1 mb-4 flex-1 overflow-y-auto">
-            {projects.map(p => (
-              <li key={p.id} onClick={() => handleSelectProject(p.id)} className={`py-2 px-3 rounded cursor-pointer ${activeProject === p.id ? 'bg-[#383950]' : 'hover:bg-[#27293f]'}`}>{p.name}</li>
-            ))}
-          </ul>
-          <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Rechercher des chats" className="mb-4 w-full p-2 rounded bg-[#27293f] text-white" />
-          <button onClick={handleNewChat} className="mb-4 w-full py-2 px-3 bg-[#27293f] rounded hover:bg-[#383950]">+ Nouveau chat</button>
-          <h3 className="uppercase text-xs mb-2 opacity-70">Chats</h3>
-          <ul className="space-y-1 flex-1 overflow-y-auto">
-            {filteredSessions.map(s => (
-              <li key={s.id} className="relative group">
-                <div onClick={() => handleSelectSession(s.id)} className={`py-2 px-3 rounded cursor-pointer ${activeId === s.id ? 'bg-[#383950]' : 'hover:bg-[#27293f]'}`}>{s.title}</div>
-                <button onClick={() => setMenuOpen(menuOpen === s.id ? null : s.id)} className="absolute right-2 top-2 opacity-0 group-hover:opacity-100">⋮</button>
-                {menuOpen === s.id && (
-                  <ul ref={menuRef} className="absolute right-2 top-6 bg-[#1f1f29] rounded shadow-lg w-40 z-10">
-                    <li onClick={() => renameSession(s.id)} className="px-4 py-2 hover:bg-[#27293f]">Renommer</li>
-                    <li onClick={() => deleteSession(s.id)} className="px-4 py-2 hover:bg-[#27293f]">Supprimer</li>
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ul>
-          <div className="pt-4 text-sm opacity-70">Marouane .J - Pro 20</div>
-        </div>
+      <aside className={`fixed top-0 left-0 h-full bg-[#0f0f17] text-white transition-all duration-300 z-20 ${sidebarOpen ? 'w-64' : 'w-16'}`}>
+        {sidebarOpen ? (
+          <div className="p-4 flex flex-col h-full">
+            <button onClick={handleNewProject} className="mb-4 w-full py-2 px-3 bg-[#27293f] rounded hover:bg-[#383950]">+ Nouveau projet</button>
+            <h3 className="uppercase text-xs mb-2 opacity-70">Projets</h3>
+            <ul className="space-y-1 mb-4 flex-1 overflow-y-auto">
+              {projects.map(p => (
+                <li key={p.id} onClick={() => handleSelectProject(p.id)} className={`py-2 px-3 rounded cursor-pointer ${activeProject === p.id ? 'bg-[#383950]' : 'hover:bg-[#27293f]'}`}>{p.name}</li>
+              ))}
+            </ul>
+            <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Rechercher des chats" className="mb-4 w-full p-2 rounded bg-[#27293f] text-white" />
+            <button onClick={handleNewChat} className="mb-4 w-full py-2 px-3 bg-[#27293f] rounded hover:bg-[#383950]">+ Nouveau chat</button>
+            <h3 className="uppercase text-xs mb-2 opacity-70">Chats</h3>
+            <ul className="space-y-1 flex-1 overflow-y-auto">
+              {filteredSessions.map(s => (
+                <li key={s.id} className="relative group">
+                  <div onClick={() => handleSelectSession(s.id)} className={`py-2 px-3 rounded cursor-pointer ${activeId === s.id ? 'bg-[#383950]' : 'hover:bg-[#27293f]'}`}>{s.title}</div>
+                  <button onClick={() => setMenuOpen(menuOpen === s.id ? null : s.id)} className="absolute right-2 top-2 opacity-0 group-hover:opacity-100">⋮</button>
+                  {menuOpen === s.id && (
+                    <ul ref={menuRef} className="absolute right-2 top-6 bg-[#1f1f29] rounded shadow-lg w-40 z-10">
+                      <li onClick={() => renameSession(s.id)} className="px-4 py-2 hover:bg-[#27293f]">Renommer</li>
+                      <li onClick={() => deleteSession(s.id)} className="px-4 py-2 hover:bg-[#27293f]">Supprimer</li>
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="pt-4 text-sm opacity-70">Marouane .J - Pro 20</div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center pt-12 space-y-4">
+            {/* Placeholder logo above menu button */}
+            <div className="w-8 h-8 border-2 border-white rounded-full mb-2"></div>
+            {/* Nouveau chat */}
+            <button onClick={() => { handleNewChat(); setSidebarOpen(true); }} className="p-2">
+              <FiPlus size={24} />
+            </button>
+            {/* Recherche chats */}
+            <button onClick={() => setSidebarOpen(true)} className="p-2">
+              <FiSearch size={24} />
+            </button>
+            {/* Agent IA */}
+            <button onClick={() => setSidebarOpen(true)} className="p-2">
+              <TbRobot size={24} />
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Chat area */}
@@ -163,7 +194,7 @@ export default function ChatPage() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5 }}
-            className="w-full bg-gradient-to-tr from-purple-700 via-purple-500 to-pink-500 rounded-2xl shadow-2xl p-4 text-white mt-4"
+            className="w-full bg-gradient-to-tr from-[#8E2DE2] to-[#00C9FF] rounded-2xl shadow-2xl p-4 text-white mt-4"
           >
             <form onSubmit={handleSubmit} className="flex items-center gap-2">
               <button
@@ -191,7 +222,7 @@ export default function ChatPage() {
               />
               <button
                 type="submit"
-                className="p-3 bg-gradient-to-tr from-purple-500 to-pink-500 rounded-full hover:scale-110 transition disabled:opacity-50"
+                className="p-3 bg-gradient-to-tr from-[#8E2DE2] to-[#00C9FF] rounded-full hover:scale-110 transition disabled:opacity-50"
               >
                 <IoSend className="text-xl text-white" />
               </button>
