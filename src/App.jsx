@@ -110,11 +110,11 @@ export default function ChatPage() {
       </button>
       {/* Global Title */}
       <img
-        src="/logo.png"
-        alt="iDJOR AI logo"
-        className={`absolute top-4 z-30 transition-all duration-300 ${sidebarOpen ? 'left-72 w-16' : 'left-20 w-[5.5rem]'}`}
-        style={{ height: 'auto' }}
-      />
+  src="/logo.png"
+  alt="iDJOR AI logo"
+  className={`absolute top-4 z-30 transition-all duration-300 ${sidebarOpen ? 'left-72 w-16' : 'left-20 w-[5.5rem]'}`}
+  style={{ height: 'auto' }}
+/>
 
       {/* Sidebar */}
       <aside className={`fixed top-0 left-0 h-full bg-[#0f0f17] text-white transition-all duration-300 z-20 ${sidebarOpen ? 'w-64' : 'w-16'}`}>
