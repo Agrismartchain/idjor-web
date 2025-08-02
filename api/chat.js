@@ -1,61 +1,47 @@
-// pages/api/chat.js
+import { useState } from "react";
 
 /**
- * Proxy API route to forward chat requests to the Ollama service via your ngrok tunnel or custom domain.
- *
- * Environment variable expected:
- *   - CHATBOT_URL: base URL of the external chat API (e.g., your ngrok tunnel)
- *   - (optional) CHATBOT_MODEL: model name, default 'llama2:latest'
+ * useChat hook:
+ * - Manages local chat history
+ * - Sends full message history to the proxy API to preserve context
  */
-export default async function handler(req, res) {
-  const API_URL = process.env.CHATBOT_URL;
-  const MODEL = process.env.CHATBOT_MODEL || 'llama2:latest';
-  if (!API_URL) {
-    return res.status(500).json({ error: 'Missing CHATBOT_URL environment variable' });
-  }
+export function useChat(sessionId) {
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // GET: return empty history (we'll manage history client-side)
-  if (req.method === 'GET') {
-    return res.status(200).json({ history: [] });
-  }
+  /**
+   * Sends a new user message along with the full conversation history
+   * to the proxy API, then appends the assistant's reply.
+   */
+  const sendMessage = async (text) => {
+    if (!sessionId || !text) return;
+    setLoading(true);
 
-  // POST: send chat completion request to Ollama
-  if (req.method === 'POST') {
-    const { message } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: 'No message provided' });
-    }
+    // Build new history including the user message
+    const updatedHistory = [...messages, { role: 'user', content: text }];
+    setMessages(updatedHistory);
+
     try {
-      const payload = {
-        model: MODEL,
-        messages: [
-          { role: 'user', content: message }
-        ]
-      };
-      const extRes = await fetch(
-        `${API_URL}/v1/chat/completions`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }
-      );
-      if (!extRes.ok) {
-        const errText = await extRes.text();
-        console.error('External API error', extRes.status, errText);
-        return res.status(extRes.status).json({ error: errText });
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, messages: updatedHistory }),
+      });
+      if (!res.ok) {
+        throw new Error(`API error ${res.status}`);
       }
-      const data = await extRes.json();
-      // extract assistant reply
-      const reply = data.choices?.[0]?.message?.content || '';
-      return res.status(200).json({ reply });
-    } catch (err) {
-      console.error('Error sending chat message:', err);
-      return res.status(500).json({ error: 'Error sending chat message' });
-    }
-  }
 
-  // Method not allowed
-  res.setHeader('Allow', ['GET', 'POST']);
-  res.status(405).end(`Method ${req.method} Not Allowed`);
+      const { reply } = await res.json();
+      if (reply) {
+        // Append assistant reply to conversation
+        setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
+      }
+    } catch (err) {
+      console.error('Error during sendMessage:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { messages, sendMessage, loading };
 }
