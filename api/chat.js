@@ -1,26 +1,27 @@
 // pages/api/chat.js
 
 /**
- * Proxy API route with Ollama integration and Supabase persistence.
+ * Proxy API route with Ollama streaming SSE and Supabase persistence.
  *
  * Environment variables (via Vercel):
  *   - CHATBOT_URL        (required)  ngrok tunnel or custom domain
- *   - SUPABASE_URL       (required)  URL of your Supabase instance
- *   - SUPABASE_ANON_KEY  (required)  Supabase anon/public key
+ *   - SUPABASE_URL       (optional)  for persisting chat history
+ *   - SUPABASE_ANON_KEY  (optional)  to initialize Supabase
  *   - CHATBOT_MODEL      (optional)  default 'llama2:latest'
  */
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
-
-// Increase body size limit if history grows
-export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
-
+// Disable body parsing so we can handle SSE
 export const config = { api: { bodyParser: false } };
+
+// Initialize Supabase client if configured
+let supabase = null;
+if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+  supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY
+  );
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -28,14 +29,25 @@ export default async function handler(req, res) {
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
-  // Parse incoming JSON body
-  let body = '';
-  for await (const chunk of req) {
-    body += chunk;
+  // Manually parse raw body
+  let raw = '';
+  for await (const chunk of req) raw += chunk;
+  let body;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return res.status(400).json({ error: 'Invalid JSON' });
   }
-  const { message } = JSON.parse(body);
+
+  const { sessionId, message } = body;
   if (!message) {
     return res.status(400).json({ error: 'No message provided' });
+  }
+
+  // Persist user message if Supabase enabled
+  if (supabase && sessionId) {
+    supabase.from('chats').insert({ session_id: sessionId, role: 'user', content: message })
+      .catch(err => console.error('Supabase insert user error', err));
   }
 
   const API_URL = process.env.CHATBOT_URL;
@@ -51,7 +63,7 @@ export default async function handler(req, res) {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: MODEL, messages: [{ role: 'user', content: message }], stream: true }),
+        body: JSON.stringify({ model: MODEL, messages: [{ role: 'user', content: message }], stream: true })
       }
     );
     if (!extRes.ok) {
@@ -60,31 +72,34 @@ export default async function handler(req, res) {
       return res.status(extRes.status).json({ error: errText });
     }
 
-    // Set up SSE stream to client
+    // Setup SSE response
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
+      Connection: 'keep-alive'
     });
 
     const reader = extRes.body.getReader();
     const decoder = new TextDecoder();
-
-    // Pipe chunks to client
+    // Stream chunks to client
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       const chunk = decoder.decode(value);
-      // Forward the raw SSE chunks from Ollama
+      // Forward SSE chunk as-is
       res.write(chunk);
     }
 
-    // Signal end of stream
-    res.write('
-');
+    // End of stream
+    res.write('\n\n');
     res.end();
+
   } catch (err) {
     console.error('Error during streaming:', err);
-    return res.status(500).json({ error: 'Streaming error' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Streaming error' });
+    } else {
+      res.end();
+    }
   }
 }
