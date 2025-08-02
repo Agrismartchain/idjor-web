@@ -4,23 +4,21 @@
  * Proxy API route with Ollama integration and Supabase persistence.
  *
  * Environment variables (via Vercel):
- *   - CHATBOT_URL         (required) ngrok tunnel or custom domain
- *   - CHATBOT_MODEL       (optional) default 'llama2:latest'
- *   - SUPABASE_URL        (optional) for persisting chat
- *   - SUPABASE_ANON_KEY   (optional) to initialize Supabase
+ *   - CHATBOT_URL        (required)  ngrok tunnel or custom domain
+ *   - SUPABASE_URL       (required)  URL of your Supabase instance
+ *   - SUPABASE_ANON_KEY  (required)  Supabase anon/public key
+ *   - CHATBOT_MODEL      (optional)  default 'llama2:latest'
  */
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client only if both URL and key are provided
-const supabase =
-  process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
-    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
-    : null;
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 // Increase body size limit if history grows
-export const config = {
-  api: { bodyParser: { sizeLimit: '1mb' } }
-};
+export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -30,45 +28,28 @@ export default async function handler(req, res) {
 
   const { sessionId, message } = req.body;
   if (!sessionId || !message) {
-    return res
-      .status(400)
-      .json({ error: 'Request body must include sessionId and message' });
+    return res.status(400).json({ error: 'sessionId and message are required in the body' });
   }
 
   const API_URL = process.env.CHATBOT_URL;
   const MODEL   = process.env.CHATBOT_MODEL || 'llama2:latest';
   if (!API_URL) {
-    return res
-      .status(500)
-      .json({ error: 'Missing CHATBOT_URL environment variable' });
+    return res.status(500).json({ error: 'Missing CHATBOT_URL environment variable' });
   }
 
-  let history = [];
-  // 1) Fetch previous messages from Supabase for context
-  if (supabase) {
-    try {
-      const { data: rows, error } = await supabase
-        .from('chats')
-        .select('role, content')
-        .eq('session_id', sessionId)
-        .order('created_at', { ascending: true });
-      if (error) {
-        console.error('Supabase fetch error:', error);
-      } else {
-        history = rows.map(({ role, content }) => ({ role, content }));
-      }
-    } catch (err) {
-      console.error('Error reading history from Supabase:', err);
-    }
+  // 1) Persist the user message in Supabase
+  try {
+    await supabase
+      .from('chats')
+      .insert({ session_id: sessionId, role: 'user', content: message });
+  } catch (dbError) {
+    console.error('Error inserting user message:', dbError);
   }
 
-  // Append current user message to history
-  history.push({ role: 'user', content: message });
-
-  // 2) Call Ollama chat completion endpoint with full history
+  // 2) Call Ollama chat completion endpoint
   let reply = '';
   try {
-    const payload = { model: MODEL, messages: history };
+    const payload = { model: MODEL, messages: [{ role: 'user', content: message }] };
     const extRes = await fetch(
       `${API_URL}/v1/chat/completions`,
       {
@@ -78,9 +59,9 @@ export default async function handler(req, res) {
       }
     );
     if (!extRes.ok) {
-      const errText = await extRes.text();
-      console.error('Ollama API error', extRes.status, errText);
-      return res.status(extRes.status).json({ error: errText });
+      const errorText = await extRes.text();
+      console.error('Ollama API error', extRes.status, errorText);
+      return res.status(extRes.status).json({ error: errorText });
     }
     const data = await extRes.json();
     reply = data.choices?.[0]?.message?.content || '';
@@ -89,15 +70,13 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Error calling chat API' });
   }
 
-  // 3) Persist messages: user and assistant
-  if (supabase) {
-    supabase
+  // 3) Persist the assistant reply in Supabase
+  try {
+    await supabase
       .from('chats')
-      .insert([
-        { session_id: sessionId, role: 'user',      content: message },
-        { session_id: sessionId, role: 'assistant', content: reply   }
-      ])
-      .catch((dbErr) => console.error('Supabase insert error:', dbErr));
+      .insert({ session_id: sessionId, role: 'assistant', content: reply });
+  } catch (dbError) {
+    console.error('Error inserting assistant reply:', dbError);
   }
 
   // 4) Return the assistant's reply
