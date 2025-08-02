@@ -1,80 +1,56 @@
 import { useState, useEffect } from "react";
 
-const STORAGE_KEY = "chat_messages_map";
-
+/**
+ * useChat hook:
+ * - GET /v1/chat/history?sessionId= to load the history
+ * - POST /v1/chat/completions with { sessionId, message } to send a new message and get updated history
+ */
 export function useChat(sessionId) {
-  // Initialize messagesMap from localStorage
-  const [messagesMap, setMessagesMap] = useState(() => {
-    if (typeof window === "undefined") return {};
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  // Base URL de l'API pointant vers ton tunnel ngrok
+  const API_URL = process.env.NEXT_PUBLIC_CHATBOT_URL || "";
 
-  // Persist messagesMap to localStorage on change
+  // 1) Charger l’historique via GET
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messagesMap));
-    } catch {
-      // ignore
-    }
-  }, [messagesMap]);
-
-  const messages = messagesMap[sessionId] || [];
-
-  const updateSession = (id, newMessages) => {
-    setMessagesMap((prev) => ({ ...prev, [id]: newMessages }));
-  };
-
-  const sendMessage = async (text) => {
+    if (!sessionId) return;
     setLoading(true);
-    const userMsg = { role: "user", content: text };
-    const history = [...messages, userMsg];
-    updateSession(sessionId, history);
+    fetch(
+      `${API_URL}/v1/chat/history?sessionId=${encodeURIComponent(
+        sessionId
+      )}`
+    )
+      .then((res) => {
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+        return res.json();
+      })
+      .then((data) => setMessages(data.history || []))
+      .catch((err) => console.error("Error loading chat history:", err))
+      .finally(() => setLoading(false));
+  }, [sessionId]);
 
+  // 2) Envoyer un message via POST
+  const sendMessage = async (text) => {
+    if (!sessionId) {
+      console.warn("sendMessage appelé sans sessionId");
+      return;
+    }
+    setLoading(true);
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch(`${API_URL}/v1/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ sessionId, message: text }),
       });
-      if (!res.ok) throw new Error("Erreur API chat");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let botContent = "";
-
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        botContent += decoder.decode(value || new Uint8Array(), { stream: true });
-      }
-
-      let reply = botContent;
-      try {
-        const data = JSON.parse(botContent);
-        if (data.reply) reply = data.reply;
-      } catch {
-        // keep raw content
-      }
-
-      const botMsg = { role: "bot", content: reply };
-      updateSession(sessionId, [...history, botMsg]);
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const { history } = await res.json();
+      setMessages(history || []);
     } catch (err) {
-      console.error(err);
+      console.error("Error sending message:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const reset = () => {
-    updateSession(sessionId, []);
-  };
-
-  return { messages, sendMessage, loading, reset };
+  return { messages, sendMessage, loading };
 }
