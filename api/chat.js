@@ -1,57 +1,55 @@
-// api/chat.js
+// pages/api/chat.js
 
+// Proxy API route to forward chat requests to the Ollama service via your ngrok tunnel
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).end("Method Not Allowed");
+  // Base URL de l’API (tunnel ngrok ou custom domain)
+  const API_URL = process.env.NEXT_PUBLIC_CHATBOT_URL;
+  if (!API_URL) {
+    return res.status(500).json({ error: 'Missing NEXT_PUBLIC_CHATBOT_URL environment variable' });
   }
-  const { message } = req.body;
-  if (!message) return res.status(400).json({ error: "No message provided" });
 
-  // 1) Lancement de l'inférence : on POST et on récupère event_id
-  const postRes = await fetch(
-    "https://wakamafarm-flan-t5-small-inference.hf.space/gradio_api/call/predict",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: [message], fn_index: 0 })
+  // GET /api/chat?sessionId=... -> history
+  if (req.method === 'GET') {
+    const { sessionId } = req.query;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId query parameter is required' });
     }
-  );
-  const postJson = await postRes.json();
-  const eventId = postJson.event_id;
-  if (!eventId) {
-    console.error("No event_id returned:", postJson);
-    return res.status(500).json({ error: "No event_id returned" });
-  }
-
-  // 2) Lecture du flux SSE pour récupérer la réponse complète
-  const streamRes = await fetch(
-    `https://wakamafarm-flan-t5-small-inference.hf.space/gradio_api/call/predict/${eventId}`,
-    { headers: { Accept: "text/event-stream" } }
-  );
-  if (!streamRes.ok) {
-    const errText = await streamRes.text();
-    console.error("Error fetching SSE:", streamRes.status, errText);
-    return res.status(streamRes.status).json({ error: errText });
-  }
-
-  const reader = streamRes.body.getReader();
-  const decoder = new TextDecoder("utf-8");
-  let botReply = "";
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    const chunk = decoder.decode(value);
-    for (const line of chunk.split("\n")) {
-      if (line.startsWith("data:")) {
-        try {
-          const payload = JSON.parse(line.slice(5).trim());
-          botReply += payload[0];
-        } catch {}
-      }
+    try {
+      const extRes = await fetch(
+        `${API_URL}/v1/chat/history?sessionId=${encodeURIComponent(sessionId)}`
+      );
+      const data = await extRes.json();
+      return res.status(extRes.status).json({ history: data.history || [] });
+    } catch (err) {
+      console.error('Error fetching chat history:', err);
+      return res.status(500).json({ error: 'Error fetching chat history' });
     }
   }
 
-  return res.status(200).json({ reply: botReply });
+  // POST /api/chat with { sessionId, message } -> complete
+  if (req.method === 'POST') {
+    const { sessionId, message } = req.body;
+    if (!sessionId || !message) {
+      return res.status(400).json({ error: 'sessionId and message are required in the body' });
+    }
+    try {
+      const extRes = await fetch(
+        `${API_URL}/v1/chat/completions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, message }),
+        }
+      );
+      const data = await extRes.json();
+      return res.status(extRes.status).json({ history: data.history || [] });
+    } catch (err) {
+      console.error('Error sending chat message:', err);
+      return res.status(500).json({ error: 'Error sending chat message' });
+    }
+  }
+
+  // Method Not Allowed
+  res.setHeader('Allow', ['GET', 'POST']);
+  res.status(405).end(`Method ${req.method} Not Allowed`);
 }
