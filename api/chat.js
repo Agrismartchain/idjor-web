@@ -23,33 +23,32 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Only POST
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
-    return res.status(405).end(`Method ${req.method} Not Allowed`);
+    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
+
+  // Debug: log incoming body
+  console.log('REQ BODY:', req.body);
 
   const { sessionId, message } = req.body;
   if (!message) {
-    return res.status(400).json({ error: 'Missing message in request body' });
+    return res.status(400).json({ error: 'Missing parameter: message' });
   }
 
+  // Validate CHATBOT_URL
   const API_URL = process.env.CHATBOT_URL;
-  const MODEL   = process.env.CHATBOT_MODEL || 'llama2:latest';
   if (!API_URL) {
-    return res.status(500).json({ error: 'CHATBOT_URL not set' });
+    console.error('CHATBOT_URL not set');
+    return res.status(500).json({ error: 'Server misconfiguration: CHATBOT_URL missing' });
   }
-
-  // Persist user message (fire & forget)
-  if (supabase && sessionId) {
-    supabase.from('chats').insert([
-      { session_id: sessionId, role: 'user', content: message }
-    ]).catch(err => console.error('Supabase user insert error:', err));
-  }
+  const MODEL = process.env.CHATBOT_MODEL || 'llama2:latest';
 
   try {
-    // Forward to Ollama and get full response
-    const extRes = await fetch(
-      `${API_URL}/v1/chat/completions`,
+    // Call external API
+    const response = await fetch(
+      `${API_URL.replace(/\/+$/,'')}/v1/chat/completions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -57,25 +56,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     );
 
-    if (!extRes.ok) {
-      const errText = await extRes.text();
-      console.error('Ollama proxy error:', extRes.status, errText);
-      return res.status(extRes.status).json({ error: errText });
+    // Proxy HTTP errors
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('External API Error:', response.status, text);
+      return res.status(response.status).json({ error: text });
     }
 
-    const data = await extRes.json();
-    const reply = data.choices?.[0]?.message?.content || '';
+    const data = await response.json();
+    console.log('External API Data:', data);
 
-    // Persist bot reply (fire & forget)
-    if (supabase && sessionId) {
-      supabase.from('chats').insert([
-        { session_id: sessionId, role: 'assistant', content: reply }
-      ]).catch(err => console.error('Supabase bot insert error:', err));
-    }
+    // Optionally persist here
 
-    return res.status(200).json({ reply });
-  } catch (err) {
-    console.error('Error in proxy handler:', err);
-    return res.status(500).json({ error: 'Proxy error' });
+    // Return full data, let client extract reply
+    return res.status(200).json(data);
+  } catch (error: any) {
+    console.error('Proxy handler exception:', error);
+    return res.status(500).json({ error: error.message || 'Unknown error' });
   }
 }
