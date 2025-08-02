@@ -2,23 +2,19 @@ import { useState, useEffect } from "react";
 
 /**
  * useChat hook:
- * - GET /v1/chat/history?sessionId= to load the history
- * - POST /v1/chat/completions with { sessionId, message } to send a new message and get updated history
+ * - GET /api/chat?sessionId= to load the history
+ * - POST /api/chat with { sessionId, message } to send a new message and get updated history
  */
 export function useChat(sessionId) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-  // Base URL de l'API pointant vers ton tunnel ngrok
-  const API_URL = process.env.NEXT_PUBLIC_CHATBOT_URL || "";
 
-  // 1) Charger l’historique via GET
+  // 1) Charger l’historique via GET sur la fonction proxy
   useEffect(() => {
     if (!sessionId) return;
     setLoading(true);
     fetch(
-      `${API_URL}/v1/chat/history?sessionId=${encodeURIComponent(
-        sessionId
-      )}`
+      `/api/chat?sessionId=${encodeURIComponent(sessionId)}`
     )
       .then((res) => {
         if (!res.ok) throw new Error(`API error ${res.status}`);
@@ -29,7 +25,7 @@ export function useChat(sessionId) {
       .finally(() => setLoading(false));
   }, [sessionId]);
 
-  // 2) Envoyer un message via POST
+  // 2) Envoyer un message via POST sur la fonction proxy
   const sendMessage = async (text) => {
     if (!sessionId) {
       console.warn("sendMessage appelé sans sessionId");
@@ -37,7 +33,7 @@ export function useChat(sessionId) {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/v1/chat/completions`, {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, message: text }),
