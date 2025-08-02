@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import { supabase } from './supabaseClient';
 
 export function useChat(sessionId) {
   const [messages, setMessages] = useState([])
@@ -54,3 +54,4 @@ export function useChat(sessionId) {
 
   return { messages, sendMessage, loading }
 }
+
