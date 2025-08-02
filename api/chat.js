@@ -1,14 +1,19 @@
 // pages/api/chat.js
 
-// Proxy API route to forward chat requests to the Ollama service via your ngrok tunnel
+/**
+ * Proxy API route to forward chat requests to the Ollama service via your ngrok tunnel or custom domain.
+ *
+ * Environment variable expected:
+ *   - CHATBOT_URL: base URL of the external chat API (e.g., your ngrok tunnel)
+ */
 export default async function handler(req, res) {
-  // Base URL de l’API (tunnel ngrok ou custom domain)
-  const API_URL = process.env.NEXT_PUBLIC_CHATBOT_URL;
+  // Retrieve base URL from environment (should not be exposed client-side)
+  const API_URL = process.env.CHATBOT_URL;
   if (!API_URL) {
-    return res.status(500).json({ error: 'Missing NEXT_PUBLIC_CHATBOT_URL environment variable' });
+    return res.status(500).json({ error: 'Missing CHATBOT_URL environment variable' });
   }
 
-  // GET /api/chat?sessionId=... -> history
+  // Handle GET for chat history
   if (req.method === 'GET') {
     const { sessionId } = req.query;
     if (!sessionId) {
@@ -26,7 +31,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // POST /api/chat with { sessionId, message } -> complete
+  // Handle POST for sending a new chat message
   if (req.method === 'POST') {
     const { sessionId, message } = req.body;
     if (!sessionId || !message) {
@@ -49,7 +54,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // Method Not Allowed
+  // Method not allowed
   res.setHeader('Allow', ['GET', 'POST']);
   res.status(405).end(`Method ${req.method} Not Allowed`);
 }
