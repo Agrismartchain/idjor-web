@@ -17,48 +17,54 @@ export function useChat(sessionId) {
     if (!sessionId || !text) return;
     setLoading(true);
 
-    // Add user message locally
-    const userMsg = { role: 'user', content: text };
-    setMessages((prev) => [...prev, userMsg]);
+    // 1) Add user message locally
+    setMessages((prev) => [...prev, { role: "user", content: text }]);
 
-    // Prepare limited history payload
-    const history = [...messages, userMsg].slice(-MAX_HISTORY);
+    // 2) Build limited history payload
+    //    Note: messages state here is still the *old* array,
+    //    so we reconstruct it with the new user message.
+    const history = [...messages, { role: "user", content: text }].slice(
+      -MAX_HISTORY
+    );
     const payload = { sessionId, messages: history };
 
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      // 3) Call your proxy API
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);
 
-      // Create placeholder for assistant reply
-      setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
-      const assistantIndex = messages.length + 1;
+      // 4) Create a placeholder for the assistant message
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
-      // Stream response
+      // 5) Stream the response
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
-      let accumulated = '';
+      let accumulated = "";
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
         if (value) {
-          const chunk = decoder.decode(value);
-          accumulated += chunk;
-          // Update last assistant message with streamed content
+          accumulated += decoder.decode(value);
+
+          // 6) Update *the last* message in the array
           setMessages((prev) => {
             const updated = [...prev];
-            updated[assistantIndex] = { role: 'assistant', content: accumulated };
+            updated[updated.length - 1] = {
+              role: "assistant",
+              content: accumulated,
+            };
             return updated;
           });
         }
       }
     } catch (err) {
-      console.error('Error sending message:', err);
+      console.error("Error sending message:", err);
     } finally {
       setLoading(false);
     }
@@ -66,4 +72,3 @@ export function useChat(sessionId) {
 
   return { messages, sendMessage, loading };
 }
-
