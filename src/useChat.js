@@ -26,7 +26,7 @@ export function useChat(sessionId) {
     const payload = { sessionId, messages: history };
 
     try {
-      const res = await fetch('/api/chat?stream=true', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -66,3 +66,4 @@ export function useChat(sessionId) {
 
   return { messages, sendMessage, loading };
 }
+
