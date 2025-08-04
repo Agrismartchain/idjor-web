@@ -12,9 +12,10 @@
     }
   ],
   "routes": [
-    // 1) Les routes /api vont vers tes lambdas
+    
     { "src": "/api/(.*)", "dest": "/api/$1.js" },
-    // 2) Tout le reste → ton index.html (SPA)
+   
     { "src": "/(.*)",    "dest": "/index.html" }
   ]
 }
+
