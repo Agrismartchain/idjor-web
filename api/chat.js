@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-  // Read raw body
+  // Lire le corps brut
   let raw = '';
   for await (const chunk of req) raw += chunk;
   let body;
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'CHATBOT_URL not set' });
   }
 
-  // Prepare context: system + recent user/bot messages
+  // Construire le contexte limité
   const recent = messages.slice(-MAX_HISTORY);
   const payload = {
     model: MODEL,
@@ -52,11 +52,11 @@ export default async function handler(req, res) {
     stream: true
   };
 
-  // Call Ollama streaming endpoint
+  // Appel en streaming vers Ollama
   let extRes;
   try {
     extRes = await fetch(
-      `${API_URL.replace(/\/+$/,'')}/v1/chat/completions?stream=true`,
+      `${API_URL.replace(/\/+$/, '')}/v1/chat/completions?stream=true`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -74,7 +74,7 @@ export default async function handler(req, res) {
     return res.status(extRes.status).json({ error: errText });
   }
 
-  // Stream SSE back to client
+  // Forwarder le flux SSE au client
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache, no-transform',
@@ -89,7 +89,8 @@ export default async function handler(req, res) {
     const chunk = decoder.decode(value);
     res.write(chunk);
   }
-  // End of stream
+
+  // Fin du stream
   res.write('\n\n');
   res.end();
 }
