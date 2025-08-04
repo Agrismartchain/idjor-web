@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    },
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    // 1) Les routes /api vont vers tes lambdas
+    { "src": "/api/(.*)", "dest": "/api/$1.js" },
+    // 2) Tout le reste → ton index.html (SPA)
+    { "src": "/(.*)",    "dest": "/index.html" }
+  ]
+}
