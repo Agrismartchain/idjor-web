@@ -30,11 +30,13 @@ export function useChat(sessionId) {
 
     try {
       // 3) Call your proxy API
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      // useChat.js, à l’endroit où tu fais fetch:
+const res = await fetch('/api/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ sessionId, messages: history })
+});
+
       if (!res.ok) throw new Error(`API error ${res.status}`);
 
       // 4) Create a placeholder for the assistant message
@@ -72,3 +74,4 @@ export function useChat(sessionId) {
 
   return { messages, sendMessage, loading };
 }
+
