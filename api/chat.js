@@ -56,13 +56,17 @@ export default async function handler(req, res) {
   let extRes;
   try {
     extRes = await fetch(
-      `${API_URL.replace(/\/+$/, '')}/v1/chat/completions?stream=true`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }
-    );
+  `${API_URL.replace(/\/+$/, '')}/v1/chat/completions`,
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model:    MODEL,
+      messages: [ { role:'system',content:SYSTEM_MSG }, ...recent ],
+      stream:   true
+    })
+  }
+);
   } catch (err) {
     console.error('Error calling Ollama:', err);
     return res.status(500).json({ error: 'Error calling chat API' });
@@ -94,3 +98,4 @@ export default async function handler(req, res) {
   res.write('\n\n');
   res.end();
 }
+
