@@ -2,71 +2,36 @@ import { useState } from "react";
 
 /**
  * useChat hook:
- * Manages chat messages locally and sends user messages with context to the proxy API.
+ * Manages chat messages locally and sends user messages to the proxy API.
+ * GET history is not used; chat history is managed client-side.
  */
 export function useChat(sessionId) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const MAX_HISTORY = 20; // Number of last messages to include
 
-  /**
-   * Sends a message along with recent conversation history,
-   * then streams back the assistant's reply token-by-token.
-   */
+  /** Sends a message and appends both user and assistant replies to messages */
   const sendMessage = async (text) => {
     if (!sessionId || !text) return;
     setLoading(true);
 
-    // 1) Add user message locally
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
-
-    // 2) Build limited history payload
-    //    Note: messages state here is still the *old* array,
-    //    so we reconstruct it with the new user message.
-    const history = [...messages, { role: "user", content: text }].slice(
-      -MAX_HISTORY
-    );
-    const payload = { sessionId, messages: history };
+    // Add user message locally
+    setMessages((prev) => [...prev, { role: 'user', content: text }]);
 
     try {
-      // 3) Call your proxy API
-      // useChat.js, à l’endroit où tu fais fetch:
-const res = await fetch('/api/chat', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ sessionId, messages: history })
-});
-
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, message: text }),
+      });
       if (!res.ok) throw new Error(`API error ${res.status}`);
 
-      // 4) Create a placeholder for the assistant message
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-      // 5) Stream the response
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let accumulated = "";
-
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (value) {
-          accumulated += decoder.decode(value);
-
-          // 6) Update *the last* message in the array
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[updated.length - 1] = {
-              role: "assistant",
-              content: accumulated,
-            };
-            return updated;
-          });
-        }
+      // Extract reply from proxy
+      const { reply } = await res.json();
+      if (reply) {
+        setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
       }
     } catch (err) {
-      console.error("Error sending message:", err);
+      console.error('Error sending message:', err);
     } finally {
       setLoading(false);
     }
