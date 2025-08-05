@@ -7,7 +7,7 @@ import { FiPaperclip, FiPlus, FiSearch } from "react-icons/fi";
 import { IoSend } from "react-icons/io5";
 import { TbRobot } from "react-icons/tb";
 import { FiMenu } from "react-icons/fi";  // menu toggle icon
-import { queryAgents } from '../lib/multiChat';
+import { queryAgents } from './multiChat';
 
 export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);  // toggle sidebar
