@@ -1,101 +1,61 @@
 // pages/api/chat.js
 
 /**
- * Proxy API route supporting streaming SSE to Ollama with context.
+ * Proxy API route to forward chat requests to the Ollama service via your ngrok tunnel or custom domain.
  *
- * Required environment variables:
- *   - CHATBOT_URL        (ngrok or custom domain)
- *   - CHATBOT_MODEL      (optional, default 'mistral-v0.3')
- *   - CHATBOT_SYSTEM_MSG (optional, default system prompt)
- *   - CHATBOT_MAX_HISTORY (optional, default 20)
+ * Environment variable expected:
+ *   - CHATBOT_URL: base URL of the external chat API (e.g., your ngrok tunnel)
+ *   - (optional) CHATBOT_MODEL: model name, default 'llama2:latest'
  */
-export const config = { api: { bodyParser: false } };
-
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST']);
-    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
-  }
-
-  // Lire le corps brut
-  let raw = '';
-  for await (const chunk of req) raw += chunk;
-  let body;
-  try {
-    body = JSON.parse(raw);
-  } catch {
-    return res.status(400).json({ error: 'Invalid JSON body' });
-  }
-
-  const { sessionId, messages } = body;
-  if (!sessionId || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'Missing sessionId or messages array' });
-  }
-
-  const API_URL       = process.env.CHATBOT_URL;
-  const MODEL         = process.env.CHATBOT_MODEL || 'mistral-v0.3';
-  const SYSTEM_MSG    = process.env.CHATBOT_SYSTEM_MSG || 'You are an AI assistant specialized in agriculture.';
-  const MAX_HISTORY   = parseInt(process.env.CHATBOT_MAX_HISTORY) || 20;
-
+  const API_URL = process.env.CHATBOT_URL;
+  const MODEL = process.env.CHATBOT_MODEL || 'llama2:latest';
   if (!API_URL) {
-    return res.status(500).json({ error: 'CHATBOT_URL not set' });
+    return res.status(500).json({ error: 'Missing CHATBOT_URL environment variable' });
   }
 
-  // Construire le contexte limité
-  const recent = messages.slice(-MAX_HISTORY);
-  const payload = {
-    model: MODEL,
-    messages: [
-      { role: 'system', content: SYSTEM_MSG },
-      ...recent
-    ],
-    stream: true
-  };
-
-  // Appel en streaming vers Ollama
-  let extRes;
-  try {
-    extRes = await fetch(
-  `${API_URL.replace(/\/+$/, '')}/v1/chat/completions`,
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model:    MODEL,
-      messages: [ { role:'system',content:SYSTEM_MSG }, ...recent ],
-      stream:   true
-    })
-  }
-);
-  } catch (err) {
-    console.error('Error calling Ollama:', err);
-    return res.status(500).json({ error: 'Error calling chat API' });
+  // GET: return empty history (we'll manage history client-side)
+  if (req.method === 'GET') {
+    return res.status(200).json({ history: [] });
   }
 
-  if (!extRes.ok) {
-    const errText = await extRes.text();
-    console.error('Ollama proxy error:', extRes.status, errText);
-    return res.status(extRes.status).json({ error: errText });
+  // POST: send chat completion request to Ollama
+  if (req.method === 'POST') {
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: 'No message provided' });
+    }
+    try {
+      const payload = {
+        model: MODEL,
+        messages: [
+          { role: 'user', content: message }
+        ]
+      };
+      const extRes = await fetch(
+        `${API_URL}/v1/chat/completions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }
+      );
+      if (!extRes.ok) {
+        const errText = await extRes.text();
+        console.error('External API error', extRes.status, errText);
+        return res.status(extRes.status).json({ error: errText });
+      }
+      const data = await extRes.json();
+      // extract assistant reply
+      const reply = data.choices?.[0]?.message?.content || '';
+      return res.status(200).json({ reply });
+    } catch (err) {
+      console.error('Error sending chat message:', err);
+      return res.status(500).json({ error: 'Error sending chat message' });
+    }
   }
 
-  // Forwarder le flux SSE au client
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    Connection: 'keep-alive'
-  });
-
-  const reader = extRes.body.getReader();
-  const decoder = new TextDecoder();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = decoder.decode(value);
-    res.write(chunk);
-  }
-
-  // Fin du stream
-  res.write('\n\n');
-  res.end();
+  // Method not allowed
+  res.setHeader('Allow', ['GET', 'POST']);
+  res.status(405).end(`Method ${req.method} Not Allowed`);
 }
-
