@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { v4 as uuid } from "uuid";
 import { motion } from "framer-motion";
 // + on n’importe plus useChat ici
-- import { useChat } from "./useChat";
+// import { useChat } from "./useChat";
 import { FaGoogleDrive, FaDropbox } from "react-icons/fa";
 import { FiPaperclip, FiPlus, FiSearch } from "react-icons/fi";
 import { IoSend } from "react-icons/io5";
